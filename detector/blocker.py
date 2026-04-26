@@ -39,10 +39,15 @@ class Blocker:
     library: shelling out keeps the surface area small, makes the audit
     trail trivially reproducible, and matches what an SRE would type at
     the prompt during an incident.
+
+    Rules are scoped to TCP ports 80/443 by default so a banned IP can
+    still reach SSH for the operator. This avoids the operations
+    nightmare of locking yourself out of your own machine if an admin
+    workstation ever generates anomalous traffic.
     """
 
-    # Backoff schedule, exposed as a class attribute so tests can override.
     DEFAULT_SCHEDULE: List[int] = [600, 1800, 7200]   # 10m, 30m, 2h, then permanent
+    DEFAULT_PORTS: List[int] = [80, 443]
 
     def __init__(
         self,
@@ -50,9 +55,11 @@ class Blocker:
         schedule_seconds: List[int],
         state_path: str,
         audit_log_path: str,
+        ports: List[int] | None = None,
     ) -> None:
         self.chain = iptables_chain
         self.schedule = schedule_seconds or self.DEFAULT_SCHEDULE
+        self.ports = ports if ports is not None else self.DEFAULT_PORTS
         self.state_path = state_path
         self.audit_log_path = audit_log_path
         self._bans: Dict[str, BanRecord] = {}
@@ -73,11 +80,16 @@ class Blocker:
             text=True,
         )
 
-    def _rule_exists(self, ip: str) -> bool:
+    def _rule_args(self, ip: str, port: int) -> List[str]:
+        """Build the per-port DROP rule shared by -C / -I / -D."""
+        return [
+            self.chain, "-p", "tcp", "-s", ip,
+            "--dport", str(port), "-j", "DROP",
+        ]
+
+    def _rule_exists(self, ip: str, port: int) -> bool:
         """``iptables -C`` returns 0 when the rule exists, 1 otherwise."""
-        result = self._iptables(
-            "-C", self.chain, "-s", ip, "-j", "DROP", check=False,
-        )
+        result = self._iptables("-C", *self._rule_args(ip, port), check=False)
         return result.returncode == 0
 
     # -------------------------------------------------------------- public API
@@ -105,11 +117,12 @@ class Blocker:
             duration = self._duration_for(ban_count)
             expires_at = (now + duration) if duration is not None else None
 
-            if not self._rule_exists(ip):
-                self._iptables("-I", self.chain, "-s", ip, "-j", "DROP")
-                log.info("iptables DROP added for %s", ip)
-            else:
-                log.info("iptables DROP already present for %s; skipping insert", ip)
+            for port in self.ports:
+                if not self._rule_exists(ip, port):
+                    self._iptables("-I", *self._rule_args(ip, port))
+                    log.info("iptables DROP added for %s tcp/%d", ip, port)
+                else:
+                    log.info("iptables DROP already present for %s tcp/%d", ip, port)
 
             record = BanRecord(
                 ip=ip,
@@ -137,9 +150,10 @@ class Blocker:
                 log.warning("unban requested for %s but no record exists", ip)
                 return None
 
-            if self._rule_exists(ip):
-                self._iptables("-D", self.chain, "-s", ip, "-j", "DROP", check=False)
-                log.info("iptables DROP removed for %s (%s)", ip, reason)
+            for port in self.ports:
+                if self._rule_exists(ip, port):
+                    self._iptables("-D", *self._rule_args(ip, port), check=False)
+                    log.info("iptables DROP removed for %s tcp/%d (%s)", ip, port, reason)
 
             existing.expires_at = None       # mark as currently un-banned
             self._save_state_locked()

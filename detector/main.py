@@ -91,6 +91,7 @@ def main() -> int:
         schedule_seconds=cfg["ban"]["schedule_seconds"],
         state_path=cfg["ban"]["state_path"],
         audit_log_path=cfg["ban"]["audit_log_path"],
+        ports=cfg["ban"].get("ports"),
     )
 
     baseline = Baseline(
