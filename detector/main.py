@@ -190,6 +190,10 @@ def main() -> int:
                 continue
 
             if verdict.kind is AnomalyKind.PER_IP:
+                log.warning(
+                    "PER-IP ANOMALY %s: %s | rate=%.2f baseline=%.2f",
+                    verdict.subject, verdict.condition, verdict.rate, verdict.baseline_mean,
+                )
                 record = blocker.ban(
                     ip=verdict.subject,
                     condition=verdict.condition,
@@ -203,6 +207,11 @@ def main() -> int:
                 notifier.send_ban(verdict, ban_count=record.ban_count, duration_seconds=duration)
             else:
                 # GLOBAL anomaly - alert only, no ban.
+                log.warning(
+                    "GLOBAL ANOMALY: %s | rate=%.2f baseline=%.2f",
+                    verdict.condition, verdict.rate, verdict.baseline_mean,
+                )
+                blocker.audit_global(verdict.condition, verdict.rate, verdict.baseline_mean)
                 notifier.send_global(verdict)
     except KeyboardInterrupt:                       # pragma: no cover
         pass

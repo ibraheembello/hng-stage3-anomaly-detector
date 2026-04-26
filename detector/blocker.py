@@ -251,3 +251,13 @@ class Blocker:
         )
         with open(self.audit_log_path, "a", encoding="utf-8") as f:
             f.write(line)
+
+    def audit_global(self, condition: str, rate: float, baseline_mean: float) -> None:
+        """Audit-log a global anomaly (no ban, alert only)."""
+        ts = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time()))
+        line = (
+            f"[{ts}] GLOBAL global | {condition} | "
+            f"rate={rate:.2f} | baseline={baseline_mean:.2f} | duration=alert-only\n"
+        )
+        with open(self.audit_log_path, "a", encoding="utf-8") as f:
+            f.write(line)
