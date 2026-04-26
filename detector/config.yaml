@@ -1,0 +1,62 @@
+# ---------------------------------------------------------------------------
+# Anomaly detector configuration.
+# Every threshold lives here so the detection logic can be tuned without
+# touching the code (per the Stage 3 specification).
+# ---------------------------------------------------------------------------
+
+log:
+  # Path the Nginx container writes JSON access logs to. Mounted into the
+  # detector container read-only via the HNG-nginx-logs named volume.
+  path: /var/log/nginx/hng-access.log
+
+window:
+  # Sliding window length (seconds) for both per-IP and global request rates.
+  duration_seconds: 60
+
+baseline:
+  # Total length of the rolling baseline window.
+  window_seconds: 1800        # 30 minutes
+  # How often the baseline is recomputed.
+  recalc_interval_seconds: 60
+  # Per-hour-of-day slot must have at least this many samples before it
+  # overrides the global rolling baseline.
+  hourly_min_samples: 300
+  # Floor applied to the mean so ``mean -> 0`` traffic never produces an
+  # explosive z-score on the first request after a quiet period.
+  mean_floor: 1.0
+  # Floor applied to stddev for the same reason.
+  stddev_floor: 0.5
+
+detection:
+  # An actor is anomalous if the z-score of its current rate exceeds this.
+  zscore_threshold: 3.0
+  # ...or if its current rate is more than this multiple of the baseline mean.
+  rate_multiplier: 5.0
+  # Per-IP error-surge multiplier. When an IP's 4xx/5xx rate is at least
+  # this multiple of the baseline error rate, its thresholds are tightened.
+  error_surge_multiplier: 3.0
+  # Tightening factors applied during an error surge.
+  error_surge_zscore_factor: 0.7    # threshold * 0.7
+  error_surge_rate_factor: 0.7      # multiplier * 0.7
+
+ban:
+  # Iptables chain to insert the DROP rule into.
+  iptables_chain: INPUT
+  # Backoff schedule (seconds). Empty value means permanent.
+  schedule_seconds: [600, 1800, 7200]
+  # Where the ban state is persisted so it survives daemon restarts.
+  state_path: /var/lib/hng-detector/banned_ips.json
+  # Where structured audit entries are appended.
+  audit_log_path: /var/log/hng-detector/audit.log
+
+slack:
+  # Read from the SLACK_WEBHOOK_URL environment variable at startup.
+  webhook_env_var: SLACK_WEBHOOK_URL
+
+dashboard:
+  bind_host: 0.0.0.0
+  bind_port: 8080
+  refresh_interval_seconds: 3
+  # Public hostname for the dashboard. Used in the index page and in audit
+  # entries. The Nginx reverse proxy is the only listener exposed on 80.
+  public_host: cloud-ng-anomaly.duckdns.org
