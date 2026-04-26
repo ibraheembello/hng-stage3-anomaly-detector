@@ -23,7 +23,7 @@
 | **Public Nextcloud (IP only)** | `http://100.55.99.253` |
 | **Live metrics dashboard (domain)** | <http://cloud-ng-anomaly.duckdns.org> |
 | **GitHub repository** | <https://github.com/ibraheembello/hng-stage3-anomaly-detector> |
-| **Beginner-friendly blog post (Dev.to)** | _link added once published_ |
+| **Beginner-friendly blog post (Dev.to)** | <https://dev.to/ibraheembello/building-a-real-time-anomaly-detection-engine-for-a-self-hosted-nextcloud-hng-stage-3-59km> |
 
 ---
 
