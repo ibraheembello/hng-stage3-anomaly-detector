@@ -1,0 +1,45 @@
+%% Mermaid source for docs/architecture.png
+%% Render: see scripts/render-arch.sh (mmdc -i architecture.mmd -o architecture.png)
+flowchart TB
+    classDef external fill:#1f6feb,stroke:#1f6feb,color:#fff
+    classDef host     fill:#161b22,stroke:#30363d,color:#c9d1d9
+    classDef app      fill:#238636,stroke:#238636,color:#fff
+    classDef daemon   fill:#bb800a,stroke:#bb800a,color:#fff
+    classDef store    fill:#6e40c9,stroke:#6e40c9,color:#fff
+
+    Internet([Internet clients]):::external
+    Attacker([Attack traffic]):::external
+
+    subgraph EC2["EC2 t3.small &middot; Ubuntu 24.04 &middot; us-east-1"]
+        UFW["UFW + AWS Security Group<br/>22, 80, 443"]:::host
+        IPTABLES["iptables INPUT<br/>(host kernel)"]:::host
+
+        subgraph Compose["Docker Compose stack"]
+            NGINX["Nginx 1.27<br/>reverse proxy<br/>JSON access log"]:::app
+            NEXTCLOUD["Nextcloud<br/>kefaslungu/hng-nextcloud<br/>(unmodified)"]:::app
+            DB[("MariaDB 10.11")]:::store
+            DETECTOR["Detector daemon (Python)<br/>monitor &middot; baseline &middot; detector<br/>blocker &middot; unbanner &middot; notifier<br/>+ Flask dashboard :8080"]:::daemon
+        end
+
+        VOL[("Named volume<br/>HNG-nginx-logs<br/>nginx writes &middot; nextcloud + detector RO")]:::store
+        STATE[("/var/lib/hng-detector<br/>banned_ips.json<br/>+ /var/log/hng-detector/audit.log")]:::store
+    end
+
+    Slack([Slack #alerts]):::external
+    DuckDNS([cloud-ng-anomaly.duckdns.org]):::external
+
+    Internet -- "HTTP :80" --> UFW
+    Attacker -- "HTTP :80 (burst)" --> UFW
+    UFW --> IPTABLES
+    IPTABLES -- "host-network" --> DETECTOR
+    IPTABLES -- "bridge" --> NGINX
+    NGINX -- "writes log" --> VOL
+    NGINX -- "proxy_pass" --> NEXTCLOUD
+    NGINX -. "Host: cloud-ng-anomaly..." .-> DETECTOR
+    NEXTCLOUD <-->|sql| DB
+    NEXTCLOUD -. "log mount RO" .-> VOL
+    DETECTOR -- "tail -f" --> VOL
+    DETECTOR -- "iptables -A/-D<br/>port-scoped DROP" --> IPTABLES
+    DETECTOR -- "POST" --> Slack
+    DETECTOR -- "persists" --> STATE
+    DuckDNS -- "DNS A" --> UFW

@@ -42,6 +42,10 @@ detection:
 ban:
   # Iptables chain to insert the DROP rule into.
   iptables_chain: INPUT
+  # TCP destination ports the ban applies to. Restricting to 80/443 keeps
+  # SSH reachable for the operator even when the offending source IP is a
+  # workstation that briefly tripped the detector.
+  ports: [80, 443]
   # Backoff schedule (seconds). Empty value means permanent.
   schedule_seconds: [600, 1800, 7200]
   # Where the ban state is persisted so it survives daemon restarts.
