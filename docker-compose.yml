@@ -88,6 +88,11 @@ services:
       - HNG-nginx-logs:/var/log/nginx
     networks:
       - backend
+    # Lets the dashboard server-block proxy to the detector daemon, which
+    # listens on :8080 of the host (host network namespace) so it can
+    # manipulate iptables.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     healthcheck:
       test: ["CMD-SHELL", "wget --quiet --tries=1 --spider http://localhost/status || exit 0"]
       interval: 30s
